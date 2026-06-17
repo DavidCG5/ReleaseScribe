@@ -2,9 +2,13 @@ package com.releasescribe.service;
 
 import com.releasescribe.dto.GenerateRequest;
 import com.releasescribe.dto.GenerateResponse;
+import com.releasescribe.dto.ReleaseNoteResponse;
 import com.releasescribe.model.ReleaseNote;
 import com.releasescribe.repository.ReleaseNoteRepository;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.UUID;
 
 @Service
 public class ReleaseNoteService {
@@ -32,5 +36,18 @@ public class ReleaseNoteService {
         note = repository.save(note);
 
         return new GenerateResponse(note.getId(), note.getTitle(), note.getGeneratedMarkdown(), note.getCreatedAt());
+    }
+
+    public List<ReleaseNoteResponse> listAll() {
+        return repository.findAllByOrderByCreatedAtDesc()
+                .stream()
+                .map(n -> new ReleaseNoteResponse(n, false))
+                .toList();
+    }
+
+    public ReleaseNoteResponse getById(UUID id) {
+        return repository.findById(id)
+                .map(n -> new ReleaseNoteResponse(n, true))
+                .orElse(null);
     }
 }
