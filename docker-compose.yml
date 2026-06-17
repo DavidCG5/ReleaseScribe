@@ -6,9 +6,9 @@ services:
     ports:
       - "5433:5432"
     environment:
-      POSTGRES_DB: releasescribe
-      POSTGRES_USER: releasescribe
-      POSTGRES_PASSWORD: releasescribe
+      POSTGRES_DB: ${DATABASE_DB:-releasescribe}
+      POSTGRES_USER: ${DATABASE_USER:-releasescribe}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
     volumes:
       - pgdata:/var/lib/postgresql/data
 

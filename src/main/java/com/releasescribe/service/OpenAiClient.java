@@ -113,7 +113,7 @@ public class OpenAiClient implements AiClient {
 
         ObjectNode userMsg = messages.addObject();
         userMsg.put("role", "user");
-        userMsg.put("content", "Clasifica y resume estos commits:\n\n" + rawCommits);
+        userMsg.put("content", "--- INICIO DE COMMITS ---\n" + rawCommits + "\n--- FIN DE COMMITS ---");
 
         return new HttpEntity<>(body.toString(), headers);
     }

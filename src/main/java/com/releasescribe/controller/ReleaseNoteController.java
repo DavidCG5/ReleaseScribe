@@ -4,6 +4,7 @@ import com.releasescribe.dto.GenerateRequest;
 import com.releasescribe.dto.GenerateResponse;
 import com.releasescribe.dto.ReleaseNoteResponse;
 import com.releasescribe.service.ReleaseNoteService;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,10 +22,7 @@ public class ReleaseNoteController {
     }
 
     @PostMapping("/generate")
-    public ResponseEntity<GenerateResponse> generate(@RequestBody GenerateRequest request) {
-        if (request.getRawCommits() == null || request.getRawCommits().isBlank()) {
-            return ResponseEntity.badRequest().build();
-        }
+    public ResponseEntity<GenerateResponse> generate(@Valid @RequestBody GenerateRequest request) {
         GenerateResponse response = releaseNoteService.generate(request);
         return ResponseEntity.ok(response);
     }
