@@ -37,7 +37,7 @@ public class MarkdownBuilder {
 
         for (String type : ORDER) {
             AiResult.Group group = findGroup(aiResult.getGroups(), type);
-            if (group == null) continue;
+            if (group == null || group.getItems() == null || group.getItems().isEmpty()) continue;
 
             String header = HEADERS.getOrDefault(type, "## " + type);
             md.append(header).append("\n\n");

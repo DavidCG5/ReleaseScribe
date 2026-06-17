@@ -40,13 +40,16 @@ public class OpenAiClient implements AiClient {
     @PostConstruct
     public void checkConfig() {
         if (apiKey == null || apiKey.isBlank()) {
-            throw new IllegalStateException("OPENAI_API_KEY no está configurada. " +
-                    "Definí la variable de entorno OPENAI_API_KEY antes de arrancar.");
+            log.warn("OPENAI_API_KEY no configurada. Solo funcionará el fallback por keywords.");
         }
     }
 
     @Override
     public AiResult classifyAndSummarize(String rawCommits) {
+        if (apiKey == null || apiKey.isBlank()) {
+            log.info("Sin API key, usando fallback directamente");
+            return fallback(rawCommits);
+        }
         try {
             return callOpenAI(rawCommits);
         } catch (Exception e) {
@@ -104,7 +107,8 @@ public class OpenAiClient implements AiClient {
                 "- Si un commit es breaking change, tiene prioridad sobre otras categorías.",
                 "- Los items deben ser resúmenes cortos (máximo 15 palabras) en español, en infinitivo.",
                 "- Si no hay commits de una categoría, no incluyas ese grupo.",
-                "- No incluyas markdown ni texto adicional fuera del JSON."
+                "- No incluyas markdown ni texto adicional fuera del JSON.",
+                "- Los commits pueden no tener prefijo convencional (feat:, fix:, etc.). Clasificalos por su contenido semántico."
         ));
 
         ObjectNode userMsg = messages.addObject();
@@ -131,11 +135,31 @@ public class OpenAiClient implements AiClient {
         }
     }
 
-    // Fallback: clasificación básica por palabras clave en los mensajes de commit
+    private static final List<String> GARBAGE_PREFIXES = List.of("~", "(END)");
+    private static final List<String> FEAT_KEYWORDS = List.of(
+            "feat", "feature", "agregar", "añadir", "nuev", "crear", "implement", "soporte", "integracion",
+            "add", "new", "support", "integration"
+    );
+    private static final List<String> FIX_KEYWORDS = List.of(
+            "fix", "bug", "corregir", "arreglar", "solucionar", "hotfix", "patch"
+    );
+    private static final List<String> CHORE_KEYWORDS = List.of(
+            "chore", "refactor", "actualizar", "mejorar", "cambiar", "upgrade", "update",
+            "bump", "dependencia", "migrar", "limpiar", "renombrar"
+    );
+    private static final List<String> DOCS_KEYWORDS = List.of(
+            "docs", "doc", "documentacion", "readme"
+    );
+    private static final List<String> BREAKING_KEYWORDS = List.of(
+            "breaking", "rompe", "cambio disruptivo", "major"
+    );
+
+    // Fallback: clasificación por palabras clave en toda la línea
     private AiResult fallback(String rawCommits) {
         List<String> lines = Arrays.stream(rawCommits.split("\n"))
                 .map(String::trim)
                 .filter(l -> !l.isEmpty())
+                .filter(l -> GARBAGE_PREFIXES.stream().noneMatch(l::startsWith))
                 .collect(Collectors.toList());
 
         List<String> features = new ArrayList<>();
@@ -146,18 +170,16 @@ public class OpenAiClient implements AiClient {
 
         for (String line : lines) {
             String lower = line.toLowerCase();
-            if (lower.contains("breaking")) {
-                breaking.add(clean(line));
-            } else if (lower.startsWith("feat") || lower.startsWith("feature")) {
-                features.add(clean(line));
-            } else if (lower.startsWith("fix")) {
-                fixes.add(clean(line));
-            } else if (lower.startsWith("chore") || lower.startsWith("refactor")) {
-                chores.add(clean(line));
-            } else if (lower.startsWith("docs") || lower.startsWith("doc")) {
-                docs.add(clean(line));
-            } else {
-                features.add(clean(line));
+
+            String category = classifyByKeywords(lower);
+            String msg = stripGitMetadata(line);
+
+            switch (category) {
+                case "breaking" -> breaking.add(msg);
+                case "fixes" -> fixes.add(msg);
+                case "docs" -> docs.add(msg);
+                case "chores" -> chores.add(msg);
+                default -> features.add(msg);
             }
         }
 
@@ -175,17 +197,38 @@ public class OpenAiClient implements AiClient {
         return result;
     }
 
+    private String stripGitMetadata(String line) {
+        // Remueve hash de commit al inicio (ej: "945a2e6 (HEAD -> master) feat: msg")
+        line = line.replaceAll("^[0-9a-f]{7,40}(\\s+\\([^)]*\\))?[:\\s]*", "")
+                .trim();
+        // Remueve prefijo convencional (feat:, fix:, etc.)
+        line = line.replaceAll("^(feat|fix|chore|docs|refactor|breaking)(\\([^)]*\\))?[:\\s]*", "")
+                .trim();
+        // Remueve guiones iniciales
+        line = line.replaceAll("^[-*]\\s*", "")
+                .trim();
+        return line;
+    }
+
+    private String classifyByKeywords(String lower) {
+        if (containsAny(lower, BREAKING_KEYWORDS)) return "breaking";
+        if (containsAny(lower, FIX_KEYWORDS)) return "fixes";
+        if (containsAny(lower, DOCS_KEYWORDS)) return "docs";
+        if (containsAny(lower, CHORE_KEYWORDS)) return "chores";
+        if (containsAny(lower, FEAT_KEYWORDS)) return "features";
+        return "features";
+    }
+
+    private boolean containsAny(String text, List<String> keywords) {
+        String lower = text.toLowerCase();
+        return keywords.stream().anyMatch(lower::contains);
+    }
+
     private void addGroup(List<AiResult.Group> groups, String type, List<String> items) {
         if (items.isEmpty()) return;
         AiResult.Group g = new AiResult.Group();
         g.setType(type);
         g.setItems(items);
         groups.add(g);
-    }
-
-    private String clean(String line) {
-        return line.replaceAll("^(feat|fix|chore|docs|refactor|breaking)(\\([^)]*\\))?[:\\s]*", "")
-                .replaceAll("^[-*]\\s*", "")
-                .trim();
     }
 }
