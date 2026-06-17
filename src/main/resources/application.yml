@@ -18,5 +18,8 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
 
+openai:
+  timeout-seconds: 30
+
 server:
   port: 8080
